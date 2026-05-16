@@ -1,7 +1,7 @@
 from pymodbus.client import ModbusTcpClient
 import time
 
-PLC_HOST = "192.168.1.10"
+PLC_HOST = "192.168.1.131"
 PLC_PORT = 502
 UNIT_ID = 1
 
