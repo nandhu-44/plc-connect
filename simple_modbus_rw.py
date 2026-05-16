@@ -1,40 +1,47 @@
 from pymodbus.client import ModbusTcpClient
-from pymodbus.payload import BinaryPayloadBuilder, BinaryPayloadDecoder
-from pymodbus.constants import Endian
+import time
 
-PLC_HOST = "192.168.1.100"
+PLC_HOST = "192.168.1.10"
 PLC_PORT = 502
 UNIT_ID = 1
 
-REGISTER_ADDR = 0  # holding register address (often zero-based)
-WRITE_VALUE = 123456  # 32-bit integer
+AHU_ON_ADDR = 8990            # BOOL (Write Coil)
 
 def main():
     client = ModbusTcpClient(host=PLC_HOST, port=PLC_PORT)
     if not client.connect():
-        raise RuntimeError("Failed to connect to PLC")
+        raise RuntimeError(f"Failed to connect to PLC at {PLC_HOST}:{PLC_PORT}")
 
-    # Read two holding registers (32-bit value)
-    rr = client.read_holding_registers(REGISTER_ADDR, count=2, unit=UNIT_ID)
+    # 1. Read current status
+    print("Reading current AHU status...")
+    rr = client.read_coils(AHU_ON_ADDR, count=1, unit=UNIT_ID)
     if rr.isError():
-        print("Read error:", rr)
-    else:
-        decoder = BinaryPayloadDecoder.fromRegisters(
-            rr.registers,
-            byteorder=Endian.BIG,
-            wordorder=Endian.BIG,
-        )
-        print("Read value:", decoder.decode_32bit_int())
+        print("Error reading status:", rr)
+        client.close()
+        return
 
-    # Write two holding registers (32-bit value)
-    builder = BinaryPayloadBuilder(byteorder=Endian.BIG, wordorder=Endian.BIG)
-    builder.add_32bit_int(WRITE_VALUE)
-    payload = builder.to_registers()
-    wr = client.write_registers(REGISTER_ADDR, payload, unit=UNIT_ID)
-    if wr.isError():
-        print("Write error:", wr)
+    original_state = rr.bits[0]
+    print(f"Current AHU status is: {'ON' if original_state else 'OFF'} ({original_state})")
+
+    # 2. Toggle status
+    new_state = not original_state
+    print(f"Toggling AHU state to: {'ON' if new_state else 'OFF'}...")
+    cw = client.write_coil(AHU_ON_ADDR, new_state, unit=UNIT_ID)
+    if cw.isError():
+        print("Error toggling state:", cw)
     else:
-        print("Write OK")
+        print("Toggle successful.")
+
+    # 3. Wait 2 seconds
+    time.sleep(2)
+
+    # 4. Revert to original state
+    print(f"Reverting AHU back to original state: {'ON' if original_state else 'OFF'}...")
+    cw = client.write_coil(AHU_ON_ADDR, original_state, unit=UNIT_ID)
+    if cw.isError():
+        print("Error reverting state:", cw)
+    else:
+        print("Revert successful.")
 
     client.close()
 
